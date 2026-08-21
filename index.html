@@ -6,20 +6,30 @@
     <title>Waltbrick App</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: auto; background: #f4f4f9; }
+        body { font-family: sans-serif; padding: 20px; max-width: 900px; margin: auto; background: #f4f4f9; }
         .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .form-group { margin-bottom: 12px; }
         label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        input, select, textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         button { background-color: #007bff; color: white; padding: 10px; border: none; border-radius: 4px; width: 100%; cursor: pointer; font-size: 16px; }
         button:hover { background-color: #0056b3; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .btn-small { padding: 5px 10px; font-size: 13px; width: auto; display: inline-block; }
+        .btn-edit { background-color: #28a745; }
+        .btn-edit:hover { background-color: #218838; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
         th, td { text-align: left; padding: 10px; border-bottom: 1px solid #ddd; }
+        img.thumb { max-width: 45px; max-height: 45px; border-radius: 4px; cursor: pointer; object-fit: cover; }
         #status { margin-top: 10px; font-weight: bold; text-align: center; padding: 8px; border-radius: 4px; }
         
+        /* Schutz-Overlay */
         #app-content { display: none; }
         #login-screen { text-align: center; padding: 50px; background: white; border-radius: 8px; margin-top: 50px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         #login-screen input { max-width: 250px; margin: 10px auto; display: inline-block; }
+
+        /* Bearbeiten-Modal (Popup) */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
+        .modal-content { background: white; margin: 10% auto; padding: 20px; border-radius: 8px; max-width: 500px; position: relative; }
+        .close-btn { position: absolute; right: 15px; top: 10px; font-size: 24px; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -33,12 +43,13 @@
     <p id="pinError" style="color: red; margin-top: 10px;"></p>
 </div>
 
-<!-- Eigentliche App (erst nach PIN sichtbar) -->
+<!-- Eigentliche App -->
 <div id="app-content">
     <div class="card">
         <h2>Gesamtumsatz: <span id="totalRevenue" style="color: #007bff;">0,00 €</span></h2>
     </div>
 
+    <!-- Neue Bestellung erfassen -->
     <div class="card">
         <h2>Neue Bestellung erfassen</h2>
         <form id="orderForm">
@@ -58,31 +69,84 @@
                     <option value="Sonstiges">Sonstiges</option>
                 </select>
             </div>
+            <div class="form-group">
+                <label for="notes">Kunde / Notiz:</label>
+                <input type="text" id="notes" placeholder="z. B. Name des Käufer oder Notizen">
+            </div>
+            <div class="form-group">
+                <label for="file">Beleg / Foto hochladen:</label>
+                <input type="file" id="file" accept="image/*,.pdf" capture="environment">
+            </div>
             <button type="submit" id="submitBtn">Speichern</button>
         </form>
         <div id="status"></div>
     </div>
 
+    <!-- Bestellungs-Liste -->
     <div class="card">
         <h2>Bestellungen</h2>
-        <table>
-            <thead>
-                <tr><th>Nummer</th><th>Plattform</th><th>Umsatz</th></tr>
-            </thead>
-            <tbody id="orderList">
-                <tr><td colspan="3">Lade Daten...</td></tr>
-            </tbody>
-        </table>
+        <div style="overflow-x:auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nummer</th>
+                        <th>Plattform</th>
+                        <th>Umsatz</th>
+                        <th>Notiz / Name</th>
+                        <th>Beleg</th>
+                        <th>Aktion</th>
+                    </tr>
+                </thead>
+                <tbody id="orderList">
+                    <tr><td colspan="6">Lade Daten...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Bestellung bearbeiten -->
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeEditModal()">&times;</span>
+        <h2>Bestellung bearbeiten</h2>
+        <input type="hidden" id="editOrderId">
+        <div class="form-group">
+            <label>Bestellnummer:</label>
+            <input type="text" id="editOrderNumber">
+        </div>
+        <div class="form-group">
+            <label>Umsatz (€):</label>
+            <input type="number" id="editAmount" step="0.01">
+        </div>
+        <div class="form-group">
+            <label>Plattform:</label>
+            <select id="editPlatform">
+                <option value="BrickLink">BrickLink</option>
+                <option value="BrickOwl">BrickOwl</option>
+                <option value="Sonstiges">Sonstiges</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Kunde / Notiz:</label>
+            <input type="text" id="editNotes">
+        </div>
+        <div class="form-group">
+            <label>Neuen Beleg hinzufügen / ersetzen:</label>
+            <input type="file" id="editFile" accept="image/*,.pdf">
+        </div>
+        <button type="button" class="btn-edit" onclick="saveEditedOrder()">Änderungen speichern</button>
     </div>
 </div>
 
 <script>
-    // --- HIER EURE GEHEIME PIN EINTRAGEN ---
-    const GEHEIME_PIN = "19782000"; 
+    const GEHEIME_PIN = "19782000"; // Eure gemeinsame PIN
 
     const SUPABASE_URL = 'https://dobwsugbitrtxydnmxpu.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_OyUfaB2OzihpDCYkC_u8EQ_2LCILRI2';
     const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let currentOrders = [];
 
     function checkPin() {
         const enteredPin = document.getElementById('pinInput').value;
@@ -91,52 +155,89 @@
             document.getElementById('app-content').style.display = 'block';
             loadData(); 
         } else {
-            document.getElementById('pinError').textContent = 'Falsche PIN! Versuch es noch einmal.';
+            document.getElementById('pinError').textContent = 'Falsche PIN!';
         }
     }
 
-    // Button-Klick und Enter-Taste sauber registrieren
     document.getElementById('unlockBtn').addEventListener('click', checkPin);
-    document.getElementById('pinInput').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') checkPin();
-    });
+    document.getElementById('pinInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') checkPin(); });
 
+    // Hilfsfunktion: Datei hochladen
+    async function uploadBelegFile(orderId, file) {
+        const fileName = `${orderId}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+        
+        const { error: uploadError } = await db.storage.from('belege').upload(fileName, file);
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = db.storage.from('belege').getPublicUrl(fileName);
+
+        const { error: fileTableError } = await db.from('belege').insert([{ 
+            bestellung_id: orderId, 
+            file_url: publicUrlData.publicUrl, 
+            file_type: file.type 
+        }]);
+
+        if (fileTableError) throw fileTableError;
+    }
+
+    // Daten laden & anzeigen
     async function loadData() {
-        const { data: orders, error } = await db.from('bestellungen').select('*');
+        const { data: orders, error: orderErr } = await db.from('bestellungen').select('*').order('id', { ascending: false });
+        const { data: files, error: fileErr } = await db.from('belege').select('*');
         const tbody = document.getElementById('orderList');
         
-        if (error) {
-            console.error('Fehler beim Laden:', error);
-            tbody.innerHTML = `<tr><td colspan="3" style="color:red;">Fehler beim Laden der Daten</td></tr>`;
+        if (orderErr) {
+            console.error(orderErr);
+            tbody.innerHTML = `<tr><td colspan="6" style="color:red;">Fehler beim Laden</td></tr>`;
             return;
         }
 
+        currentOrders = orders || [];
         tbody.innerHTML = '';
         let total = 0;
 
-        if (!orders || orders.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3">Noch keine Bestellungen vorhanden.</td></tr>';
+        if (currentOrders.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6">Noch keine Bestellungen vorhanden.</td></tr>';
             document.getElementById('totalRevenue').textContent = '0,00 €';
             return;
         }
 
-        orders.forEach(order => {
+        currentOrders.forEach(order => {
             const num = order.bestellnummer || '-';
             const plat = order.plattform || '-';
             const ums = Number(order.umsatz || 0);
+            const note = order.notizen || '-';
 
             total += ums;
 
+            // Passenden Beleg suchen
+            const file = files ? files.find(f => f.bestellung_id === order.id) : null;
+            let fileHtml = 'Kein Beleg';
+
+            if (file && file.file_url) {
+                if (file.file_type && file.file_type.includes('pdf')) {
+                    fileHtml = `<a href="${file.file_url}" target="_blank">📄 PDF</a>`;
+                } else {
+                    fileHtml = `<a href="${file.file_url}" target="_blank"><img src="${file.file_url}" class="thumb" title="Klicken zum Öffnen"></a>`;
+                }
+            }
+
             tbody.innerHTML += `<tr>
-                <td>${num}</td>
+                <td><b>${num}</b></td>
                 <td>${plat}</td>
                 <td>${ums.toFixed(2)} €</td>
+                <td>${note}</td>
+                <td>${fileHtml}</td>
+                <td>
+                    <button class="btn-small btn-edit" onclick="openEditModal(${order.id})">✏️ Bearbeiten</button>
+                </td>
             </tr>`;
         });
 
         document.getElementById('totalRevenue').textContent = total.toFixed(2) + ' €';
     }
 
+    // Neue Bestellung speichern
     document.getElementById('orderForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         
@@ -145,24 +246,33 @@
         btn.disabled = true;
         statusDiv.style.backgroundColor = '#e7f3ff';
         statusDiv.style.color = '#0056b3';
-        statusDiv.textContent = 'Speichere Daten...';
+        statusDiv.textContent = 'Speichere Daten & lädt Beleg hoch...';
 
         const bestellnummer = document.getElementById('orderNumber').value;
         const umsatz = parseFloat(document.getElementById('amount').value);
         const plattform = document.getElementById('platform').value;
+        const notizen = document.getElementById('notes').value;
+        const fileInput = document.getElementById('file').files[0];
 
         try {
-            const { error } = await db
+            // 1. Eintrag in 'bestellungen'
+            const { data: newOrder, error } = await db
                 .from('bestellungen')
-                .insert([{ bestellnummer: bestellnummer, umsatz: umsatz, plattform: plattform }]);
+                .insert([{ bestellnummer, umsatz, plattform, notizen }])
+                .select()
+                .single();
 
             if (error) throw error;
+
+            // 2. Falls Datei vorhanden -> Upload
+            if (fileInput && newOrder) {
+                await uploadBelegFile(newOrder.id, fileInput);
+            }
 
             statusDiv.style.backgroundColor = '#d4edda';
             statusDiv.style.color = 'green';
             statusDiv.textContent = 'Erfolgreich gespeichert!';
             document.getElementById('orderForm').reset();
-            
             await loadData();
 
         } catch (error) {
@@ -174,6 +284,54 @@
             btn.disabled = false;
         }
     });
+
+    // Bearbeiten-Modal Steuerung
+    function openEditModal(orderId) {
+        const order = currentOrders.find(o => o.id === orderId);
+        if (!order) return;
+
+        document.getElementById('editOrderId').value = order.id;
+        document.getElementById('editOrderNumber').value = order.bestellnummer || '';
+        document.getElementById('editAmount').value = order.umsatz || '';
+        document.getElementById('editPlatform').value = order.plattform || 'BrickLink';
+        document.getElementById('editNotes').value = order.notizen || '';
+        document.getElementById('editFile').value = '';
+
+        document.getElementById('editModal').style.display = 'block';
+    }
+
+    function closeEditModal() {
+        document.getElementById('editModal').style.display = 'none';
+    }
+
+    async function saveEditedOrder() {
+        const id = document.getElementById('editOrderId').value;
+        const bestellnummer = document.getElementById('editOrderNumber').value;
+        const umsatz = parseFloat(document.getElementById('editAmount').value);
+        const plattform = document.getElementById('editPlatform').value;
+        const notizen = document.getElementById('editNotes').value;
+        const editFileInput = document.getElementById('editFile').files[0];
+
+        try {
+            // 1. Updates in DB schreiben
+            const { error } = await db
+                .from('bestellungen')
+                .update({ bestellnummer, umsatz, plattform, notizen })
+                .eq('id', id);
+
+            if (error) throw error;
+
+            // 2. Falls ein neuer Beleg ausgewählt wurde
+            if (editFileInput) {
+                await uploadBelegFile(id, editFileInput);
+            }
+
+            closeEditModal();
+            await loadData();
+        } catch (err) {
+            alert('Fehler beim Bearbeiten: ' + err.message);
+        }
+    }
 </script>
 
 </body>
