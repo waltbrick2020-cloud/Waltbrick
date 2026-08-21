@@ -319,8 +319,12 @@
     });
 
     function openEditModal(orderId) {
+        // Wir wandeln sicherheitshalber beide Seiten in Strings um zum Vergleichen
         const order = currentOrders.find(function(o) { return String(o.id) === String(orderId); });
-        if (!order) return;
+        if (!order) {
+            console.error("Bestellung mit ID nicht gefunden:", orderId);
+            return;
+        }
 
         document.getElementById('editOrderId').value = order.id;
         document.getElementById('editOrderDate').value = order.datum ? order.datum.split('T')[0] : '';
