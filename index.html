@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Waltbrick App</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: auto; background: #f4f4f9; }
+        .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .form-group { margin-bottom: 12px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; padding: 10px; border: none; border-radius: 4px; width: 100%; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #0056b3; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { text-align: left; padding: 10px; border-bottom: 1px solid #ddd; }
+        #status { margin-top: 10px; font-weight: bold; text-align: center; padding: 8px; border-radius: 4px; }
+        
+        #app-content { display: none; }
+        #login-screen { text-align: center; padding: 50px; background: white; border-radius: 8px; margin-top: 50px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        #login-screen input { max-width: 250px; margin: 10px auto; display: inline-block; }
+    </style>
+</head>
+<body>
+
+<!-- PIN-Abfrage Bildschirm -->
+<div id="login-screen">
+    <h2>🔒 Geschützter Bereich</h2>
+    <p>Bitte gib die gemeinsame PIN ein, um die Waltbrick App zu öffnen:</p>
+    <input type="password" id="pinInput" placeholder="PIN eingeben...">
+    <button type="button" id="unlockBtn" style="max-width: 200px; margin: auto;">Entsperren</button>
+    <p id="pinError" style="color: red; margin-top: 10px;"></p>
+</div>
+
+<!-- Eigentliche App (erst nach PIN sichtbar) -->
+<div id="app-content">
+    <div class="card">
+        <h2>Gesamtumsatz: <span id="totalRevenue" style="color: #007bff;">0,00 €</span></h2>
+    </div>
+
+    <div class="card">
+        <h2>Neue Bestellung erfassen</h2>
+        <form id="orderForm">
+            <div class="form-group">
+                <label for="orderNumber">Bestellnummer:</label>
+                <input type="text" id="orderNumber" required>
+            </div>
+            <div class="form-group">
+                <label for="amount">Umsatz (€):</label>
+                <input type="number" id="amount" step="0.01" required>
+            </div>
+            <div class="form-group">
+                <label for="platform">Plattform:</label>
+                <select id="platform">
+                    <option value="BrickLink">BrickLink</option>
+                    <option value="BrickOwl">BrickOwl</option>
+                    <option value="Sonstiges">Sonstiges</option>
+                </select>
+            </div>
+            <button type="submit" id="submitBtn">Speichern</button>
+        </form>
+        <div id="status"></div>
+    </div>
+
+    <div class="card">
+        <h2>Bestellungen</h2>
+        <table>
+            <thead>
+                <tr><th>Nummer</th><th>Plattform</th><th>Umsatz</th></tr>
+            </thead>
+            <tbody id="orderList">
+                <tr><td colspan="3">Lade Daten...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // --- HIER EURE GEHEIME PIN EINTRAGEN ---
+    const GEHEIME_PIN = "19782000"; 
+
+    const SUPABASE_URL = 'https://dobwsugbitrtxydnmxpu.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_OyUfaB2OzihpDCYkC_u8EQ_2LCILRI2';
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    function checkPin() {
+        const enteredPin = document.getElementById('pinInput').value;
+        if (enteredPin === GEHEIME_PIN) {
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('app-content').style.display = 'block';
+            loadData(); 
+        } else {
+            document.getElementById('pinError').textContent = 'Falsche PIN! Versuch es noch einmal.';
+        }
+    }
+
+    // Button-Klick und Enter-Taste sauber registrieren
+    document.getElementById('unlockBtn').addEventListener('click', checkPin);
+    document.getElementById('pinInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') checkPin();
+    });
+
+    async function loadData() {
+        const { data: orders, error } = await db.from('bestellungen').select('*');
+        const tbody = document.getElementById('orderList');
+        
+        if (error) {
+            console.error('Fehler beim Laden:', error);
+            tbody.innerHTML = `<tr><td colspan="3" style="color:red;">Fehler beim Laden der Daten</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = '';
+        let total = 0;
+
+        if (!orders || orders.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3">Noch keine Bestellungen vorhanden.</td></tr>';
+            document.getElementById('totalRevenue').textContent = '0,00 €';
+            return;
+        }
+
+        orders.forEach(order => {
+            const num = order.bestellnummer || '-';
+            const plat = order.plattform || '-';
+            const ums = Number(order.umsatz || 0);
+
+            total += ums;
+
+            tbody.innerHTML += `<tr>
+                <td>${num}</td>
+                <td>${plat}</td>
+                <td>${ums.toFixed(2)} €</td>
+            </tr>`;
+        });
+
+        document.getElementById('totalRevenue').textContent = total.toFixed(2) + ' €';
+    }
+
+    document.getElementById('orderForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const btn = document.getElementById('submitBtn');
+        const statusDiv = document.getElementById('status');
+        btn.disabled = true;
+        statusDiv.style.backgroundColor = '#e7f3ff';
+        statusDiv.style.color = '#0056b3';
+        statusDiv.textContent = 'Speichere Daten...';
+
+        const bestellnummer = document.getElementById('orderNumber').value;
+        const umsatz = parseFloat(document.getElementById('amount').value);
+        const plattform = document.getElementById('platform').value;
+
+        try {
+            const { error } = await db
+                .from('bestellungen')
+                .insert([{ bestellnummer: bestellnummer, umsatz: umsatz, plattform: plattform }]);
+
+            if (error) throw error;
+
+            statusDiv.style.backgroundColor = '#d4edda';
+            statusDiv.style.color = 'green';
+            statusDiv.textContent = 'Erfolgreich gespeichert!';
+            document.getElementById('orderForm').reset();
+            
+            await loadData();
+
+        } catch (error) {
+            console.error('Speicher-Fehler:', error);
+            statusDiv.style.backgroundColor = '#f8d7da';
+            statusDiv.style.color = 'red';
+            statusDiv.textContent = 'Fehler: ' + error.message;
+        } finally {
+            btn.disabled = false;
+        }
+    });
+</script>
+
+</body>
+</html>
