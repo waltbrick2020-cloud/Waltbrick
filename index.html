@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Waltbrick App</title>
-    <!-- Supabase & Chart.js für das Diagramm -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -34,22 +33,19 @@
 </head>
 <body>
 
-<!-- PIN-Abfrage -->
 <div id="login-screen">
-    <h2>🔒 Geschützter Bereich</h2>
+    <h2>Geschützter Bereich</h2>
     <p>Bitte gib die gemeinsame PIN ein:</p>
     <input type="password" id="pinInput" placeholder="PIN eingeben...">
     <button type="button" id="unlockBtn" style="max-width: 200px; margin: auto;">Entsperren</button>
     <p id="pinError" style="color: red; margin-top: 10px;"></p>
 </div>
 
-<!-- Eigentliche App -->
 <div id="app-content">
     <div class="card">
         <h2>Gesamtumsatz: <span id="totalRevenue" style="color: #007bff;">0,00 €</span></h2>
     </div>
 
-    <!-- Diagramm Card -->
     <div class="card">
         <h3>Tagesumsatz</h3>
         <div style="position: relative; height:200px; width:100%">
@@ -57,7 +53,6 @@
         </div>
     </div>
 
-    <!-- Neue Bestellung -->
     <div class="card">
         <h2>Neue Bestellung erfassen</h2>
         <form id="orderForm">
@@ -94,7 +89,6 @@
         <div id="status"></div>
     </div>
 
-    <!-- Liste -->
     <div class="card">
         <h2>Bestellungen</h2>
         <div style="overflow-x:auto;">
@@ -118,7 +112,6 @@
     </div>
 </div>
 
-<!-- Bearbeiten Modal -->
 <div id="editModal" class="modal">
     <div class="modal-content">
         <span class="close-btn" onclick="closeEditModal()">&times;</span>
@@ -157,7 +150,7 @@
 </div>
 
 <script>
-    const GEHEIME_PIN = "19782000"; // Eure PIN
+    const GEHEIME_PIN = "19782000";
 
     const SUPABASE_URL = 'https://dobwsugbitrtxydnmxpu.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_OyUfaB2OzihpDCYkC_u8EQ_2LCILRI2';
@@ -166,7 +159,6 @@
     let currentOrders = [];
     let myChart = null;
 
-    // Standardmäßig heutiges Datum ins Formular eintragen
     document.getElementById('orderDate').valueAsDate = new Date();
 
     function checkPin() {
@@ -181,10 +173,14 @@
     }
 
     document.getElementById('unlockBtn').addEventListener('click', checkPin);
-    document.getElementById('pinInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') checkPin(); });
+    document.getElementById('pinInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') checkPin();
+    });
 
     async function uploadBelegFile(orderId, file) {
-        const fileName = `${orderId}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+        const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const fileName = orderId + '_' + Date.now() + '_' + cleanName;
+        
         const { error: uploadError } = await db.storage.from('belege').upload(fileName, file);
         if (uploadError) throw uploadError;
 
@@ -203,7 +199,7 @@
         const tbody = document.getElementById('orderList');
         
         if (orderErr) {
-            tbody.innerHTML = `<tr><td colspan="7" style="color:red;">Fehler beim Laden</td></tr>`;
+            tbody.innerHTML = '<tr><td colspan="7" style="color:red;">Fehler beim Laden</td></tr>';
             return;
         }
 
@@ -219,7 +215,7 @@
             return;
         }
 
-        currentOrders.forEach(order => {
+        currentOrders.forEach(function(order) {
             const id = order.id;
             const datum = order.datum ? order.datum.split('T')[0] : '-';
             const num = order.bestellnummer || '-';
@@ -229,33 +225,30 @@
 
             total += ums;
 
-            // Tagesumsätze für das Diagramm summieren
             if (order.datum) {
                 const dayKey = order.datum.split('T')[0];
                 dailyTotals[dayKey] = (dailyTotals[dayKey] || 0) + ums;
             }
 
-            const file = files ? files.find(f => f.bestellung_id === id) : null;
+            const file = files ? files.find(function(f) { return f.bestellung_id === id; }) : null;
             let fileHtml = 'Kein Beleg';
             if (file && file.file_url) {
                 if (file.file_type && file.file_type.includes('pdf')) {
-                    fileHtml = `<a href="${file.file_url}" target="_blank">📄 PDF</a>`;
+                    fileHtml = '<a href="' + file.file_url + '" target="_blank">PDF</a>';
                 } else {
-                    fileHtml = `<a href="${file.file_url}" target="_blank"><img src="${file.file_url}" class="thumb"></a>`;
+                    fileHtml = '<a href="' + file.file_url + '" target="_blank"><img src="' + file.file_url + '" class="thumb"></a>';
                 }
             }
 
-            tbody.innerHTML += `<tr>
-                <td>${datum}</td>
-                <td><b>${num}</b></td>
-                <td>${plat}</td>
-                <td>${ums.toFixed(2)} €</td>
-                <td>${note}</td>
-                <td>${fileHtml}</td>
-                <td>
-                    <button type="button" class="btn-small btn-edit" onclick="openEditModal(${id})">✏️ Bearbeiten</button>
-                </td>
-            </tr>`;
+            tbody.innerHTML += '<tr>' +
+                '<td>' + datum + '</td>' +
+                '<td><b>' + num + '</b></td>' +
+                '<td>' + plat + '</td>' +
+                '<td>' + ums.toFixed(2) + ' €</td>' +
+                '<td>' + note + '</td>' +
+                '<td>' + fileHtml + '</td>' +
+                '<td><button type="button" class="btn-small btn-edit" onclick="openEditModal(' + id + ')">Bearbeiten</button></td>' +
+                'বৃত্ত';
         });
 
         document.getElementById('totalRevenue').textContent = total.toFixed(2) + ' €';
@@ -264,7 +257,7 @@
 
     function updateChart(dailyTotals) {
         const sortedDays = Object.keys(dailyTotals).sort();
-        const dataValues = sortedDays.map(day => dailyTotals[day]);
+        const dataValues = sortedDays.map(function(day) { return dailyTotals[day]; });
 
         const ctx = document.getElementById('revenueChart').getContext('2d');
         if (myChart) myChart.destroy();
@@ -307,7 +300,7 @@
         try {
             const { data: newOrder, error } = await db
                 .from('bestellungen')
-                .insert([{ datum, bestellnummer, umsatz, plattform, notizen }])
+                .insert([{ datum: datum, bestellnummer: bestellnummer, umsatz: umsatz, plattform: plattform, notizen: notizen }])
                 .select()
                 .single();
 
@@ -326,7 +319,7 @@
     });
 
     function openEditModal(orderId) {
-        const order = currentOrders.find(o => o.id === orderId);
+        const order = currentOrders.find(function(o) { return String(o.id) === String(orderId); });
         if (!order) return;
 
         document.getElementById('editOrderId').value = order.id;
@@ -356,7 +349,7 @@
         try {
             const { error } = await db
                 .from('bestellungen')
-                .update({ datum, bestellnummer, umsatz, plattform, notizen })
+                .update({ datum: datum, bestellnummer: bestellnummer, umsatz: umsatz, plattform: plattform, notizen: notizen })
                 .eq('id', id);
 
             if (error) throw error;
